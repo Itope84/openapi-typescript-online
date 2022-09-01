@@ -1,9 +1,70 @@
 import type { NextPage } from 'next'
 import Head from 'next/head'
 import Image from 'next/image'
+import { useEffect, useState } from 'react'
 import styles from '../styles/Home.module.css'
+import yaml from 'js-yaml'
+import { transformAll } from 'openapi-typescript/dist/transform/index';
 
 const Home: NextPage = () => {
+  const [file, setFile] = useState<File | null>(null)
+  const [contents, setContents] = useState<any>(null)
+  const [tsStr, setTsStr] = useState<string>('')
+
+  useEffect(() => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = function(e) { 
+      const fileContents = e.target?.result;
+      setContents(fileContents)
+    }
+    r.readAsText(file);
+  }, [file])
+
+  useEffect(() => {
+    if (!contents) return
+    convert(contents)
+  }, [contents])
+
+  function parseSchema(schema: any, type: "YAML" | "JSON") {
+  if (type === "YAML") {
+    try {
+      return yaml.load(schema);
+    } catch (err: any) {
+      throw new Error(`YAML: ${err.toString()}`);
+    }
+  } else {
+    try {
+      return JSON.parse(schema);
+    } catch (err: any) {
+      throw new Error(`JSON: ${err.toString()}`);
+    }
+  }
+}
+
+  const convert = async (contents: string) => {
+    const rootTypes = await transformAll(parseSchema(contents, 'YAML'), {
+      additionalProperties: false,
+      commentHeader: `/**
+      * Automatically generated
+      **/`,
+      defaultNonNullable: false,
+      immutableTypes: false,
+      contentNever: false,
+    makePathsEnum: false,
+      rawSchema: false,
+    version: 3
+    })
+    console.log(rootTypes)
+    let output = ``
+    for (const k of Object.keys(rootTypes)) {
+      if (typeof rootTypes[k] === "string") {
+        output += `export type ${k} = {\n  ${rootTypes[k]}\n}\n\n`;
+      }
+    }
+    setTsStr(output)
+  }
+
   return (
     <div className={styles.container}>
       <Head>
@@ -21,6 +82,21 @@ const Home: NextPage = () => {
           Get started by editing{' '}
           <code className={styles.code}>pages/index.tsx</code>
         </p>
+
+        <label>
+          Select file
+          <input type="file" onChange={(e) => setFile(e.target.files && e.target.files[0])} />
+        </label>
+
+        <div style={{ display: 'flex' }}>
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            {contents}
+          </div>
+
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            {tsStr}
+          </div>
+        </div>
 
         <div className={styles.grid}>
           <a href="https://nextjs.org/docs" className={styles.card}>
